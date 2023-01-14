@@ -1,6 +1,7 @@
-package cloudmetrics
+package cloudwatchmetrics
 
 //	Copyright 2016 Matt Ho
+//	Copyright 2023 Alexander Liesenfeld
 //
 //	Licensed under the Apache License, Version 2.0 (the "License");
 //	you may not use this file except in compliance with the License.
@@ -16,15 +17,9 @@ package cloudmetrics
 
 import (
 	"fmt"
-	"io"
-	"io/ioutil"
-	"os"
-	"sort"
-	"strings"
 	"testing"
 	"time"
 
-	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/cloudwatch"
 	"github.com/rcrowley/go-metrics"
 	"golang.org/x/net/context"
@@ -32,13 +27,11 @@ import (
 
 var debug = func(*Publisher) {}
 
-var debug2 = Debug(os.Stderr)
-
-type Mock struct {
+type MockCloudWatchClient struct {
 	Inputs []*cloudwatch.PutMetricDataInput
 }
 
-func (m *Mock) PutMetricData(input *cloudwatch.PutMetricDataInput) (*cloudwatch.PutMetricDataOutput, error) {
+func (m *MockCloudWatchClient) PutMetricData(input *cloudwatch.PutMetricDataInput) (*cloudwatch.PutMetricDataOutput, error) {
 	if m.Inputs == nil {
 		m.Inputs = []*cloudwatch.PutMetricDataInput{}
 	}
@@ -56,8 +49,8 @@ func TestPollOnceCounter(t *testing.T) {
 	registry.Register(name, c)
 	c.Inc(int64(value))
 
-	publisher := newPublisher(registry, "blah", debug)
-	data := publisher.pollOnce()
+	publisher := newPublisher(registry, "blah", &MockCloudWatchClient{}, debug)
+	data := publisher.readMetrics()
 
 	if v := len(data); v != 1 {
 		t.Errorf("expected 1 event to be published; got %v", v)
@@ -79,8 +72,8 @@ func TestPollOnceGauge(t *testing.T) {
 	registry.Register("blah", c)
 	c.Update(int64(value))
 
-	publisher := newPublisher(registry, "blah", debug)
-	data := publisher.pollOnce()
+	publisher := newPublisher(registry, "blah", &MockCloudWatchClient{}, debug)
+	data := publisher.readMetrics()
 
 	if v := len(data); v != 1 {
 		t.Errorf("expected 1 event to be published; got %v", v)
@@ -99,8 +92,8 @@ func TestPollOnceGauge64(t *testing.T) {
 	registry.Register("blah", c)
 	c.Update(value)
 
-	publisher := newPublisher(registry, "blah", debug)
-	data := publisher.pollOnce()
+	publisher := newPublisher(registry, "blah", &MockCloudWatchClient{}, debug)
+	data := publisher.readMetrics()
 
 	if v := len(data); v != 1 {
 		t.Errorf("expected 1 event to be published; got %v", v)
@@ -119,8 +112,8 @@ func TestPollOnceMeter(t *testing.T) {
 	registry.Register("blah", c)
 	c.Mark(int64(value))
 
-	publisher := newPublisher(registry, "blah", debug)
-	data := publisher.pollOnce()
+	publisher := newPublisher(registry, "blah", &MockCloudWatchClient{}, debug)
+	data := publisher.readMetrics()
 
 	if v := len(data); v != 1 {
 		t.Errorf("expected 1 event to be published; got %v", v)
@@ -139,48 +132,18 @@ func TestPollOnceHistogram(t *testing.T) {
 	c.Update(int64(value))
 	registry.Register("blah", c)
 
-	publisher := newPublisher(registry, "blah", debug)
-	data := publisher.pollOnce()
-	sort.Sort(data)
+	publisher := newPublisher(registry, "blah", &MockCloudWatchClient{}, debug)
+	data := publisher.readMetrics()
 
 	if v := len(data); v != 5 {
-		t.Errorf("expected 1 event to be published; got %v", v)
+		t.Errorf("expected 5 events to be published; got %v", v)
 	}
 
-	if v := *data[0].MetricName; v != "blah.count" {
-		t.Errorf("expected blah.count; got %v", v)
-	}
-	if v := *data[0].Value; v != 1 {
-		t.Errorf("expected blah.count; got %v", v)
-	}
-
-	if v := *data[1].MetricName; v != "blah.p50" {
-		t.Errorf("expected blah.p50; got %v", v)
-	}
-	if v := *data[1].Value; v != value {
-		t.Errorf("expected blah.count; got %v", value)
-	}
-
-	if v := *data[2].MetricName; v != "blah.p75" {
-		t.Errorf("expected blah.p75; got %v", v)
-	}
-	if v := *data[2].Value; v != value {
-		t.Errorf("expected blah.count; got %v", value)
-	}
-
-	if v := *data[3].MetricName; v != "blah.p95" {
-		t.Errorf("expected blah.p95; got %v", v)
-	}
-	if v := *data[3].Value; v != value {
-		t.Errorf("expected blah.count; got %v", value)
-	}
-
-	if v := *data[4].MetricName; v != "blah.p99" {
-		t.Errorf("expected blah.p99; got %v", v)
-	}
-	if v := *data[4].Value; v != value {
-		t.Errorf("expected blah.count; got %v", value)
-	}
+	assertDatumExists(t, data, "blah.count", 1)
+	assertDatumExists(t, data, "blah.p50", value)
+	assertDatumExists(t, data, "blah.p75", value)
+	assertDatumExists(t, data, "blah.p95", value)
+	assertDatumExists(t, data, "blah.p99", value)
 }
 
 func TestPollOnceHistogramCustomPercentile(t *testing.T) {
@@ -191,27 +154,15 @@ func TestPollOnceHistogramCustomPercentile(t *testing.T) {
 	c.Update(int64(value))
 	registry.Register("blah", c)
 
-	publisher := newPublisher(registry, "blah", debug, Percentiles([]float64{.44}))
-	data := publisher.pollOnce()
-	sort.Sort(data)
+	publisher := newPublisher(registry, "blah", &MockCloudWatchClient{}, debug, Percentiles([]float64{.44}))
+	data := publisher.readMetrics()
 
 	if v := len(data); v != 2 {
 		t.Errorf("expected 1 event to be published; got %v", v)
 	}
 
-	if v := *data[0].MetricName; v != "blah.count" {
-		t.Errorf("expected blah.count; got %v", v)
-	}
-	if v := *data[0].Value; v != 1 {
-		t.Errorf("expected blah.count; got %v", v)
-	}
-
-	if v := *data[1].MetricName; v != "blah.p44" {
-		t.Errorf("expected blah.p44; got %v", v)
-	}
-	if v := *data[1].Value; v != value {
-		t.Errorf("expected blah.count; got %v", value)
-	}
+	assertDatumExists(t, data, "blah.count", 1)
+	assertDatumExists(t, data, "blah.p44", value)
 }
 
 func TestPollOnceTimer(t *testing.T) {
@@ -222,48 +173,18 @@ func TestPollOnceTimer(t *testing.T) {
 	c.Update(time.Duration(value))
 	registry.Register("blah", c)
 
-	publisher := newPublisher(registry, "blah", Interval(time.Millisecond*100), debug)
-	data := publisher.pollOnce()
-	sort.Sort(data)
+	publisher := newPublisher(registry, "blah", &MockCloudWatchClient{}, Interval(time.Millisecond*100), debug)
+	data := publisher.readMetrics()
 
 	if v := len(data); v != 5 {
 		t.Errorf("expected 1 event to be published; got %v", v)
 	}
 
-	if v := *data[0].MetricName; v != "blah.count" {
-		t.Errorf("expected blah.count; got %v", v)
-	}
-	if v := *data[0].Value; v != 1 {
-		t.Errorf("expected %v; got %v", value, v)
-	}
-
-	if v := *data[1].MetricName; v != "blah.p50" {
-		t.Errorf("expected blah.p50; got %v", v)
-	}
-	if v := *data[1].Value; v != value {
-		t.Errorf("expected %v; got %v", value, v)
-	}
-
-	if v := *data[2].MetricName; v != "blah.p75" {
-		t.Errorf("expected blah.p75; got %v", v)
-	}
-	if v := *data[2].Value; v != value {
-		t.Errorf("expected %v; got %v", value, v)
-	}
-
-	if v := *data[3].MetricName; v != "blah.p95" {
-		t.Errorf("expected blah.p95; got %v", v)
-	}
-	if v := *data[3].Value; v != value {
-		t.Errorf("expected %v; got %v", value, v)
-	}
-
-	if v := *data[4].MetricName; v != "blah.p99" {
-		t.Errorf("expected blah.p99; got %v", v)
-	}
-	if v := *data[4].Value; v != value {
-		t.Errorf("expected %v; got %v", value, v)
-	}
+	assertDatumExists(t, data, "blah.count", 1)
+	assertDatumExists(t, data, "blah.p50", value)
+	assertDatumExists(t, data, "blah.p75", value)
+	assertDatumExists(t, data, "blah.p95", value)
+	assertDatumExists(t, data, "blah.p99", value)
 }
 
 func TestPollOnceDimensions(t *testing.T) {
@@ -273,8 +194,8 @@ func TestPollOnceDimensions(t *testing.T) {
 	registry.Register("blah", c)
 	c.Inc(1)
 
-	publisher := newPublisher(registry, "blah", debug, Dimensions("foo", "bar"))
-	data := publisher.pollOnce()
+	publisher := newPublisher(registry, "blah", &MockCloudWatchClient{}, debug, Dimensions("foo", "bar"))
+	data := publisher.readMetrics()
 
 	if v := len(data[0].Dimensions); v != 1 {
 		t.Errorf("expected 1 event to be published; got %v", v)
@@ -296,29 +217,20 @@ func TestPollOnceInvalidDimensions(t *testing.T) {
 	registry.Register("blah", c)
 	c.Inc(1)
 
-	publisher := newPublisher(registry, "blah", debug, Dimensions("foo"))
-	data := publisher.pollOnce()
+	publisher := newPublisher(registry, "blah", &MockCloudWatchClient{}, Dimensions("foo"))
+	data := publisher.readMetrics()
 
 	if v := len(data[0].Dimensions); v != 0 {
 		t.Errorf("expected 0 dimensions; got %v", v)
 	}
 }
 
-type NilWriter struct {
-}
-
-func (n NilWriter) Write(p []byte) (int, error) {
-	return len(p), nil
-}
-
 func TestPublish(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	go func() {
-		time.Sleep(time.Millisecond * 200)
+		time.Sleep(time.Millisecond * 250)
 		cancel()
 	}()
-
-	namespace := "woot"
 
 	registry := metrics.NewRegistry()
 
@@ -329,38 +241,22 @@ func TestPublish(t *testing.T) {
 		t.Update(time.Second)
 	}
 
-	mock := &Mock{}
-	Publish(registry, namespace, Client(mock), Interval(time.Millisecond*50), Context(ctx), Debug(NilWriter{}))
+	mock := &MockCloudWatchClient{}
+
+	Publish(mock, registry, "mynamespace", Interval(time.Millisecond*1), Context(ctx))
 
 	if len(mock.Inputs) == 0 {
+		t.Logf("mock pointer: %p", mock)
 		t.Error("expected at least one datum to have been published")
 	}
 }
 
-func TestRegion(t *testing.T) {
-	lookupFunc := func(context.Context) (io.ReadCloser, error) {
-		return ioutil.NopCloser(strings.NewReader("us-east-1a")), nil
+func assertDatumExists(t *testing.T, data []*cloudwatch.MetricDatum, metricName string, value float64) {
+	for idx := range data {
+		if *data[idx].MetricName == metricName && *data[idx].Value == value {
+			return
+		}
 	}
 
-	if v := region(lookupFunc); v != "us-east-1" {
-		t.Errorf("expected us-east-1; got %v", v)
-	}
-}
-
-func TestSortDatum(t *testing.T) {
-	d1 := &cloudwatch.MetricDatum{MetricName: aws.String("a")}
-	d2 := &cloudwatch.MetricDatum{MetricName: aws.String("b")}
-	d3 := &cloudwatch.MetricDatum{MetricName: aws.String("c")}
-	datums := Datums{d2, d1, d3}
-	sort.Sort(datums)
-
-	if v := datums[0]; v != d1 {
-		t.Errorf("expected %v ; got %v", d1.MetricName, *v.MetricName)
-	}
-	if v := datums[1]; v != d2 {
-		t.Errorf("expected %v ; got %v", d2.MetricName, *v.MetricName)
-	}
-	if v := datums[2]; v != d3 {
-		t.Errorf("expected %v ; got %v", d3.MetricName, *v.MetricName)
-	}
+	t.Errorf("coud not find datum with metric name %s and value %v", metricName, value)
 }
