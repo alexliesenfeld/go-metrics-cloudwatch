@@ -1,4 +1,4 @@
-module github/alexliesenfeld/go-metrics-cloudwatch
+module github.com/alexliesenfeld/go-metrics-cloudwatch
 
 go 1.18
 
