@@ -16,13 +16,13 @@ package cloudwatchmetrics
 //	limitations under the License.
 
 import (
+	"context"
 	"fmt"
 	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/cloudwatch"
 	"github.com/rcrowley/go-metrics"
-	"golang.org/x/net/context"
 )
 
 type PutMetricsClient interface {
