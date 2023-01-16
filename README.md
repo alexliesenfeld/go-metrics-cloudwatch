@@ -1,7 +1,7 @@
-cloudmetrics 
+go-metrics-cloudwatch-reporter 
 --------------
 
-This is a reporter for [go-metrics](https://github.com/rcrowley/go-metrics) that will send metrics to [CloudWatch](https://aws.amazon.com/cloudwatch/) as a custom metric.
+This library provides a reporter for [go-metrics](https://github.com/rcrowley/go-metrics) that will send metrics to [CloudWatch](https://aws.amazon.com/cloudwatch/).
 
 ### Usage
 

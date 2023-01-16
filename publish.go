@@ -1,4 +1,4 @@
-package cloudwatchreporter
+package reporter
 
 //	Copyright 2016 Matt Ho
 //	Copyright 2023 Alexander Liesenfeld

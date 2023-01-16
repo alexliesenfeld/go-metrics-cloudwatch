@@ -1,6 +1,7 @@
 package main
 
 import (
+	reporter "github.com/alexliesenfeld/go-metrics-cloudwatch-reporter"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/cloudwatch"
@@ -19,8 +20,8 @@ func main() {
 
 	client := cloudwatch.New(session.New(&aws.Config{Region: aws.String("eu-central-1")}))
 
-	cloudwatchmetrics.Publish(client, metrics.DefaultRegistry, "sample-namespace",
-		cloudwatchmetrics.Interval(5*time.Second),
-		cloudwatchmetrics.Debug(os.Stderr),
+	reporter.Publish(client, metrics.DefaultRegistry, "sample-namespace",
+		reporter.Interval(5*time.Second),
+		reporter.Debug(os.Stderr),
 	)
 }
