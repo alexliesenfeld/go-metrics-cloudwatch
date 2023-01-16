@@ -1,7 +1,7 @@
 go-metrics-cloudwatch-reporter 
 --------------
 
-[![Build Status](https://snap-ci.com/alexliesenfeld/go-metrics-cloudwatch-reporter/branch/master/build_image)](https://snap-ci.com/alexliesenfeld/go-metrics-cloudwatch-reporter/branch/master)
+[![Build Status](https://github.com/alexliesenfeld/go-metrics-cloudwatch-reporter/actions/workflows/go.yml/badge.svg)](https://github.com/github.com/alexliesenfeld/go-metrics-cloudwatch-reporter/actions/workflows/go.yml/badge.svg)
 [![GoDoc](https://godoc.org/github.com/alexliesenfeld/go-metrics-cloudwatch-reporter?status.svg)](https://godoc.org/github.com/alexliesenfeld/go-metrics-cloudwatch-reporter)
 
 This library provides a reporter for [go-metrics](https://github.com/rcrowley/go-metrics) that will send metrics to [CloudWatch](https://aws.amazon.com/cloudwatch/).
