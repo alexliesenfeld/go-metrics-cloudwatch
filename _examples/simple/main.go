@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	reporter "github.com/alexliesenfeld/go-metrics-cloudwatch-reporter"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
@@ -22,6 +23,10 @@ func main() {
 
 	reporter.Publish(client, metrics.DefaultRegistry, "sample-namespace",
 		reporter.Interval(5*time.Second),
-		reporter.Debug(os.Stderr),
+		reporter.Dimensions("taskID", "123"),
+		reporter.Percentiles([]float64{.5, .75, .95, .99}),
+		reporter.Context(context.Background()),
+		reporter.Log(os.Stderr),
+		reporter.Debug(os.Stdout),
 	)
 }
