@@ -8,7 +8,7 @@ This library provides a reporter for [go-metrics](https://github.com/rcrowley/go
 ```go
 import "github.com/alexliesenfeld/go-metrics-cloudwatch-reporter"
 
-go cloudwatchreporter.Publish(metrics.DefaultRegistry,
+go reporter.Publish(metrics.DefaultRegistry,
     "/sample/", // namespace
 )
 ```
@@ -20,11 +20,11 @@ cloudmetrics supports a number of configuration options
 ```go
 import "github.com/alexliesenfeld/go-metrics-cloudwatch-reporter"
 
-go cloudwatchreporter.Publish(metrics.DefaultRegistry,
-    "sample-namespace",                              // namespace
-    cloudmetrics.Dimensions("k1", "v1", "k2", "v2"), // allows for custom dimensions
-    cloudmetrics.Interval(time.Minutes * 5),         // custom interval
-    cloudmetrics.Context(context.Background()),      // enables graceful shutdown
-    cloudmetrics.Percentiles([]float64{.5, .99}),    // customize percentiles for histograms and timers 
+go reporter.Publish(metrics.DefaultRegistry,
+    "sample-namespace",                          // namespace
+    reporter.Dimensions("k1", "v1", "k2", "v2"), // allows for custom dimensions
+    reporter.Interval(time.Minutes * 5),         // custom interval
+    reporter.Context(context.Background()),      // enables graceful shutdown
+    reporter.Percentiles([]float64{.5, .99}),    // customize percentiles for histograms and timers 
 )
 ```
